@@ -16,14 +16,14 @@ and set up a DNS record pointing to this server's IP address (you can also use a
    apt update && apt upgrade -y
    ```
 
-2. Make a directory where you want to install Teslamate and to the directory, for example:
+2. Make the directory where you want to install Teslamate and to the directory, for example:
    ```
    mkdir -p ~/teslamate
-   cd ~/teslamate
    ```
 
-3. Configure and up the stack:
+3. Go to a directory where you want to install Teslamate and configure and up the stack:
    ```
+   cd ~/teslamate
    bash -c "$(curl -sSL https://github.com/dlis/teslamate/raw/master/install.sh)"
    ```
 
@@ -41,6 +41,9 @@ If you want to change the domain name (when you host Teslamate on a public serve
 file named "settings.env", and re-configure the stack as shown in the last step of the installation instructions. If you
 want to upgrade the stack just re-configure the stack. If you forgot the password, just re-configure the stack and new
 password will be generated.
+
+If you want to create a backup of the database, you can do it by running the following command:
+```docker compose --file services.yml exec -T database pg_dump -U teslamate teslamate > ./teslamate.bck```
 
 ## Uninstallation
 
