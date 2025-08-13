@@ -106,10 +106,10 @@ services:
       - DATABASE_NAME=teslamate
       - DATABASE_USER=teslamate
       - DATABASE_PASS=${DATABASE_PASSWORD}
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_SERVER_DOMAIN=${DOMAIN}
       - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s/grafana
-      #- GF_SERVER_SERVE_FROM_SUB_PATH=true
     volumes:
       - grafana:/var/lib/grafana
   database:
@@ -134,7 +134,7 @@ PASSWORD="$(rand 30)"
 
 # Generate a Caddyfile
 docker compose --file "${PWD}/services.yml" up --detach caddy
-docker compose --file "${PWD}/services.yml" exec caddy sh -c "cat > /etc/caddy/Caddyfile <<'EOF'
+docker compose --file "${PWD}/services.yml" exec -T caddy sh -c "cat > /etc/caddy/Caddyfile <<'EOF'
 ${DOMAIN} {
   basic_auth {
     ${USERNAME} $(docker run --rm -it caddy:2-alpine caddy hash-password -p ${PASSWORD})
@@ -167,4 +167,4 @@ username and the password mentioned above if needed, and specify URLs:
 – \"https://${DOMAIN}\" as URL for the web app,
 – \"https://${DOMAIN}/grafana\" as URL for the dashboards.
 
-Enjoy using TeslaMate!"
+Enjoy using TeslaMate!\n"
