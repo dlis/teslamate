@@ -1,10 +1,10 @@
 # Easy Teslamate
 
 This tool allows you to quickly set up, maintain, and upgrade a minimal stack
-for [Teslamate](https://github.com/teslamate-org/teslamate) with SSL, password protection and Gzip compression, which
-can be hosted on a public server or your own computer with a Unix-like operating system supported by Docker (tested on
-Ubuntu and MacOS). If you want to host Teslamate on a public server, buy a domain name and set up a DNS record pointing
-to this server's IP address (you can also use a subdomain like teslamate.example.com).
+for [Teslamate](https://github.com/teslamate-org/teslamate) with SSL, password protection, Gzip compression, support
+of Chinese vehicles, which can be hosted on a public server or your own computer with a Unix-like operating system
+supported by Docker (tested on Ubuntu and MacOS). If you want to host Teslamate on a public server, buy a domain name
+and set up a DNS record pointing to this server's IP address (you can also use a subdomain like teslamate.example.com).
 
 ## Installation
 

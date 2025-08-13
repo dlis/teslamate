@@ -39,6 +39,13 @@ command -v docker &>/dev/null || curl -fsSL https://get.docker.com | sh
 
 # Generate a config if missing
 if test ! -e "${SETTINGS}"; then
+  if confirm "Is your Tesla for a Chinese market?"; then
+    API_HOST="https://owner-api.vn.cloud.tesla.cn"
+    WSS_HOST="wss://streaming.vn.cloud.tesla.cn"
+  else
+    API_HOST="https://owner-api.teslamotors.com"
+    WSS_HOST="wss://streaming.vn.teslamotors.com"
+  fi
   if confirm "Do you want to host Teslamate on a public server"; then
     prompt "Specify a domain name pointing to this server" && DOMAIN="${REPLY}"
   else
@@ -52,6 +59,8 @@ DOMAIN=${DOMAIN}
 USERNAME=${USERNAME}
 
 # Changing following settings can damage the stack:
+TESLA_API_HOST=${API_HOST}
+TESLA_WSS_HOST=${WSS_HOST}
 ENCRYPTION_SECRET=$(rand 50)
 DATABASE_PASSWORD=$(rand 50)
 EOL
