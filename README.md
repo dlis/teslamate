@@ -48,7 +48,7 @@ want to upgrade the stack, just re-configure the stack. If you forgot the passwo
 new password will be generated.
 
 If you want to create a backup of the database, you can do it by running the following command:
-```docker compose --file services.yml exec -T database pg_dump -U teslamate teslamate > ./teslamate.bck```
+```docker compose --file services.yml exec -T database pg_dump -U teslamate teslamate > ./database.bck```
 
 ## Uninstallation
 

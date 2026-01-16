@@ -5,6 +5,9 @@ set -o pipefail
 set -o nounset
 
 SETTINGS="${PWD}/settings.env"
+SERVICES="${PWD}/services.yml"
+DATABASE="${PWD}/database.tmp"
+POSTGRES=18
 
 function style() {
   local msg && msg="$(tput setaf "${1}")${2}"
@@ -68,8 +71,18 @@ EOL
 # Read the config
 fi; source "${SETTINGS}"
 
+# Backup database to upgrade postgres
+if test -e "${SERVICES}"; then
+  docker compose --file "${SERVICES}" up --detach database && until \
+  docker compose --file "${SERVICES}" exec -T database pg_isready -U teslamate &>/dev/null; do sleep 1; done && \
+  docker compose --file "${SERVICES}" exec -T database pg_config --version | grep -oE '[0-9]+' | head -n1 | grep -vq "${POSTGRES}" && { \
+    confirm "Upgrading postgres is needed. Would you like to create a backup with old data, upgrade postgres and restore the backup?" || exit 0
+    docker compose --file "${SERVICES}" exec -T database pg_dump -U teslamate teslamate > "${DATABASE}" || { rm -f "${DATABASE}"; exit 1; }
+  }
+fi
+
 # Generate a stack file
-cat >"${PWD}/services.yml" <<EOL
+cat >"${SERVICES}" <<EOL
 services:
   caddy:
     image: caddy:2-alpine
@@ -113,7 +126,7 @@ services:
     volumes:
       - grafana:/var/lib/grafana
   database:
-    image: postgres:18
+    image: postgres:${POSTGRES}
     restart: always
     environment:
       - POSTGRES_DB=teslamate
@@ -129,12 +142,15 @@ volumes:
   database:
 EOL
 
+# Update the stack
+docker compose --file "${SERVICES}" pull
+
 # Generate a password
 PASSWORD="$(rand 30)"
 
 # Generate a Caddyfile
-docker compose --file "${PWD}/services.yml" up --detach caddy
-docker compose --file "${PWD}/services.yml" exec -T caddy sh -c "cat > /etc/caddy/Caddyfile <<'EOF'
+docker compose --file "${SERVICES}" up --detach caddy
+docker compose --file "${SERVICES}" exec -T caddy sh -c "cat > /etc/caddy/Caddyfile <<'EOF'
 ${DOMAIN} {
   basic_auth {
     ${USERNAME} $(docker run --rm -it caddy:2-alpine caddy hash-password -p ${PASSWORD})
@@ -147,9 +163,19 @@ ${DOMAIN} {
 }
 EOF"
 
-# Restart the stack
-docker compose --file "${PWD}/services.yml" down --remove-orphans
-docker compose --file "${PWD}/services.yml" up --build --detach
+# Stop the stack
+docker compose --file "${SERVICES}" down --remove-orphans
+
+# Restore the backup if exists
+if test -s "${DATABASE}"; then
+  docker compose --file "${SERVICES}" down --volumes grafana database && \
+  docker compose --file "${SERVICES}" up --detach database && until \
+  docker compose --file "${SERVICES}" exec -T database pg_isready -U teslamate &>/dev/null; do sleep 1; done && \
+  docker compose --file "${SERVICES}" exec -T database psql -U teslamate -d teslamate < "${DATABASE}" && rm -f "${DATABASE}"
+fi
+
+# Start the stack
+docker compose --file "${SERVICES}" up --build --detach
 
 # Show next instructions
 style 2 "
