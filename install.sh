@@ -113,14 +113,14 @@ services:
     volumes:
       - grafana:/var/lib/grafana
   database:
-    image: postgres:17
+    image: postgres:18
     restart: always
     environment:
       - POSTGRES_DB=teslamate
       - POSTGRES_USER=teslamate
       - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
     volumes:
-      - database:/var/lib/postgresql/data
+      - database:/var/lib/postgresql
 volumes:
   caddy-etc:
   caddy-config:
