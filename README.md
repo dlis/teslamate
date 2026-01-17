@@ -26,7 +26,12 @@ to this server's IP address (you can also use a subdomain like teslamate.example
    mkdir -p ~/teslamate
    ```
 
-3. Go to a directory where you want to install TeslaMate and configure the stack:
+3. If you have the backup of the database, copy the backup named as "database.tmp" to the directory:
+   ```
+   cp path_to/your_backup ~/teslamate/database.tmp
+   ```
+
+4. Go to a directory where you want to install TeslaMate and configure the stack:
    ```
    cd ~/teslamate
    bash -c "$(curl -sSL https://github.com/dlis/teslamate/raw/master/install.sh)"
@@ -48,7 +53,7 @@ want to upgrade the stack, just re-configure the stack. If you forgot the passwo
 new password will be generated.
 
 If you want to create a backup of the database, you can do it by running the following command:
-```docker compose --file services.yml exec -T database pg_dump -U teslamate teslamate > ./teslamate.bck```
+```docker compose --file services.yml exec -T database pg_dump -U teslamate teslamate > ./database.bck```
 
 ## Uninstallation
 
