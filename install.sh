@@ -153,7 +153,7 @@ docker compose --file "${SERVICES}" up --detach caddy
 docker compose --file "${SERVICES}" exec -T caddy sh -c "cat > /etc/caddy/Caddyfile <<'EOF'
 ${DOMAIN} {
   basic_auth {
-    ${USERNAME} $(docker run --rm -it caddy:2-alpine caddy hash-password -p ${PASSWORD})
+    ${USERNAME} $(docker run --rm caddy:2-alpine caddy hash-password -p "${PASSWORD}")
   }
   encode gzip
   reverse_proxy teslamate:4000
@@ -175,7 +175,7 @@ if test -s "${DATABASE}"; then
 fi
 
 # Start the stack
-docker compose --file "${SERVICES}" up --build --detach
+docker compose --file "${SERVICES}" up --detach
 
 # Show next instructions
 style 2 "
