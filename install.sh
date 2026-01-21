@@ -155,7 +155,7 @@ ${DOMAIN} {
   basic_auth {
     ${USERNAME} $(docker run --rm caddy:2-alpine caddy hash-password -p "${PASSWORD}")
   }
-  encode gzip
+  encode zstd gzip
   reverse_proxy teslamate:4000
   handle_path /grafana* {
     reverse_proxy grafana:3000

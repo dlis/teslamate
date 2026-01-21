@@ -3,7 +3,7 @@
 This tool allows you to quickly set up a stack for [TeslaMate](https://github.com/teslamate-org/teslamate) with
 the following features (tested on MacOS and Ubuntu):
 
-- automatic HTTPS for localhost and a public server with Gzip compression,
+- automatic HTTPS for localhost and a public server with compression (Zstd/Gzip),
 - automatic password generation and only one long password (30 characters),
 - only the necessary containers (for example, MQTT is disabled),
 - support for Chinese vehicles.
