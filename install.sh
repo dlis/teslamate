@@ -91,8 +91,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - caddy-etc:/etc/caddy
-      - caddy-config:/config
+      - caddy-conf:/etc/caddy
       - caddy-data:/data
   teslamate:
     image: teslamate/teslamate:latest
@@ -135,8 +134,7 @@ services:
     volumes:
       - database:/var/lib/postgresql
 volumes:
-  caddy-etc:
-  caddy-config:
+  caddy-conf:
   caddy-data:
   grafana:
   database:
