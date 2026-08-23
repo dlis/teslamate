@@ -106,6 +106,8 @@ services:
       - ENCRYPTION_KEY=${ENCRYPTION_SECRET}
       - VIRTUAL_HOST=${DOMAIN}
       - TZ=${TIMEZONE}
+      - TESLA_API_HOST=${TESLA_API_HOST}
+      - TESLA_WSS_HOST=${TESLA_WSS_HOST}
       - CHECK_ORIGIN=true
       - DISABLE_MQTT=true
     cap_drop:
