@@ -91,8 +91,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - caddy-etc:/etc/caddy
-      - caddy-config:/config
+      - caddy-conf:/etc/caddy
       - caddy-data:/data
   teslamate:
     image: teslamate/teslamate:latest
@@ -107,6 +106,8 @@ services:
       - ENCRYPTION_KEY=${ENCRYPTION_SECRET}
       - VIRTUAL_HOST=${DOMAIN}
       - TZ=${TIMEZONE}
+      - TESLA_API_HOST=${TESLA_API_HOST}
+      - TESLA_WSS_HOST=${TESLA_WSS_HOST}
       - CHECK_ORIGIN=true
       - DISABLE_MQTT=true
     cap_drop:
@@ -135,8 +136,7 @@ services:
     volumes:
       - database:/var/lib/postgresql
 volumes:
-  caddy-etc:
-  caddy-config:
+  caddy-conf:
   caddy-data:
   grafana:
   database:
@@ -145,23 +145,42 @@ EOL
 # Update the stack
 docker compose --file "${SERVICES}" pull
 
-# Generate a password
+# Generate a password, a session token and a password hash
 PASSWORD="$(rand 30)"
+SESSION="$(rand 50)"
+HASH="$(printf '%s\n' "${PASSWORD}" | docker run --rm --interactive caddy:2-alpine caddy hash-password)"
 
-# Generate a Caddyfile
+# Generate a Caddyfile, secrets are passed through stdin to keep them out of the process list
 docker compose --file "${SERVICES}" up --detach caddy
-docker compose --file "${SERVICES}" exec -T caddy sh -c "cat > /etc/caddy/Caddyfile <<'EOF'
+docker compose --file "${SERVICES}" exec -T caddy sh -c "cat > /etc/caddy/Caddyfile" <<EOL
 ${DOMAIN} {
-  basic_auth {
-    ${USERNAME} $(docker run --rm caddy:2-alpine caddy hash-password -p "${PASSWORD}")
-  }
-  encode gzip
-  reverse_proxy teslamate:4000
-  handle_path /grafana* {
-    reverse_proxy grafana:3000
+  route {
+    # WebKit does not send Basic Auth credentials on WebSocket handshakes
+    # (https://bugs.webkit.org/show_bug.cgi?id=80362), so only handshakes of
+    # the known endpoints are authenticated by the cookie issued below, any
+    # other request is always authenticated by the password. The route block
+    # keeps basic_auth ahead of the header directive, otherwise the default
+    # order applies and the cookie leaks in unauthorized responses
+    @unauthenticated {
+      not {
+        path /live/websocket /grafana/api/live/ws
+        header Upgrade websocket
+        header_regexp Cookie "(^|;\s*)caddy_session=${SESSION}(\s*;|\$)"
+      }
+    }
+    basic_auth @unauthenticated {
+      ${USERNAME} ${HASH}
+    }
+    @unauthorized not header_regexp Cookie "(^|;\s*)caddy_session=${SESSION}(\s*;|\$)"
+    header @unauthorized +Set-Cookie "caddy_session=${SESSION}; Secure; HttpOnly; SameSite=Lax; Path=/"
+    encode zstd gzip
+    handle_path /grafana* {
+      reverse_proxy grafana:3000
+    }
+    reverse_proxy teslamate:4000
   }
 }
-EOF"
+EOL
 
 # Stop the stack
 docker compose --file "${SERVICES}" down --remove-orphans

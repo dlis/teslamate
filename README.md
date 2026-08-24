@@ -3,7 +3,7 @@
 This tool allows you to quickly set up a stack for [TeslaMate](https://github.com/teslamate-org/teslamate) with
 the following features (tested on MacOS and Ubuntu):
 
-- automatic HTTPS for localhost and a public server with Gzip compression,
+- automatic HTTPS for localhost and a public server with compression (Zstd/Gzip),
 - automatic password generation and only one long password (30 characters),
 - only the necessary containers (for example, MQTT is disabled),
 - support for Chinese vehicles.
@@ -50,10 +50,14 @@ The file structure created by this tool during installation is as follows:
 If you want to change the domain name (when you host TeslaMate on a public server), username, or timezone, just edit the
 file named "settings.env", and re-configure the stack as shown in the last step of the installation instructions. If you
 want to upgrade the stack, just re-configure the stack. If you forgot the password, just re-configure the stack and a
-new password will be generated.
+new password will be generated. Note that re-configuring the stack always generates a new password, so log in again in
+the browser tabs which were opened before it.
 
 If you want to create a backup of the database, you can do it by running the following command:
 ```docker compose --file services.yml exec -T database pg_dump -U teslamate teslamate > ./database.bck```
+
+To restore that backup, rename it to "database.tmp" and re-configure the stack. Keep the backup under any other name,
+otherwise it will be restored on the next re-configuration of the stack, replacing the current data.
 
 ## Uninstallation
 
