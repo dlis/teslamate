@@ -83,10 +83,17 @@ fi
 
 # Generate a stack file
 cat >"${SERVICES}" <<EOL
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
 services:
   caddy:
     image: caddy:2-alpine
     restart: always
+    <<: *logging
     ports:
       - "80:80"
       - "443:443"
@@ -96,6 +103,7 @@ services:
   teslamate:
     image: teslamate/teslamate:latest
     restart: always
+    <<: *logging
     depends_on:
       - database
     environment:
@@ -115,6 +123,7 @@ services:
   grafana:
     image: teslamate/grafana:latest
     restart: always
+    <<: *logging
     environment:
       - DATABASE_HOST=database
       - DATABASE_NAME=teslamate
@@ -129,6 +138,7 @@ services:
   database:
     image: postgres:${POSTGRES}
     restart: always
+    <<: *logging
     environment:
       - POSTGRES_DB=teslamate
       - POSTGRES_USER=teslamate
