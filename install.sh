@@ -74,7 +74,7 @@ fi; source "${SETTINGS}"
 # Backup database to upgrade postgres
 if test -e "${SERVICES}"; then
   docker compose --file "${SERVICES}" up --detach database && until \
-  docker compose --file "${SERVICES}" exec -T database pg_isready -U teslamate &>/dev/null; do sleep 1; done && \
+  docker compose --file "${SERVICES}" exec -T database pg_isready -h localhost -U teslamate &>/dev/null; do sleep 1; done && \
   docker compose --file "${SERVICES}" exec -T database pg_config --version | grep -oE '[0-9]+' | head -n1 | grep -vq "${POSTGRES}" && { \
     confirm "Upgrading postgres is needed. Would you like to create a backup with old data, upgrade postgres and restore the backup?" || exit 0
     docker compose --file "${SERVICES}" exec -T database pg_dump -U teslamate teslamate > "${DATABASE}" || { rm -f "${DATABASE}"; exit 1; }
@@ -189,8 +189,8 @@ docker compose --file "${SERVICES}" down --remove-orphans
 if test -s "${DATABASE}"; then
   docker compose --file "${SERVICES}" down --volumes grafana database && \
   docker compose --file "${SERVICES}" up --detach database && until \
-  docker compose --file "${SERVICES}" exec -T database pg_isready -U teslamate &>/dev/null; do sleep 1; done && \
-  docker compose --file "${SERVICES}" exec -T database psql -U teslamate -d teslamate < "${DATABASE}" && rm -f "${DATABASE}"
+  docker compose --file "${SERVICES}" exec -T database pg_isready -h localhost -U teslamate &>/dev/null; do sleep 1; done && \
+  docker compose --file "${SERVICES}" exec -T database psql -v ON_ERROR_STOP=1 -U teslamate -d teslamate < "${DATABASE}" && rm -f "${DATABASE}"
 fi
 
 # Start the stack
