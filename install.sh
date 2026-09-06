@@ -196,6 +196,9 @@ fi
 # Start the stack
 docker compose --file "${SERVICES}" up --detach
 
+# Remove old images
+docker image prune --force
+
 # Show next instructions
 style 2 "
 Save the following credentials, they will be used to log in to TeslaMate:
