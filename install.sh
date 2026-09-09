@@ -38,6 +38,15 @@ function rand() {
   openssl rand -base64 ${1} | tr -dc 'A-Za-z0-9' | head -c ${1}
 }
 
+function ready() {
+  for _ in {1..120}; do
+    docker compose --file "${SERVICES}" exec -T database pg_isready -h localhost -U teslamate &>/dev/null && return 0
+    sleep 1
+  done
+  style 1 "The database is not ready, check its logs: docker compose --file services.yml logs database\n"
+  return 1
+}
+
 # Install Docker if missing
 command -v docker &>/dev/null || curl -fsSL https://get.docker.com | sh
 
@@ -83,14 +92,17 @@ EOL
 # Read the config, configs generated earlier have no tunnel
 fi; source "${SETTINGS}"; TUNNEL="${TUNNEL-}"
 
-# Backup database to upgrade postgres
-if test -e "${SERVICES}"; then
-  docker compose --file "${SERVICES}" up --detach database && until \
-  docker compose --file "${SERVICES}" exec -T database pg_isready -h localhost -U teslamate &>/dev/null; do sleep 1; done && \
-  docker compose --file "${SERVICES}" exec -T database pg_config --version | grep -oE '[0-9]+' | head -n1 | grep -vq "${POSTGRES}" && { \
+# Backup the database to upgrade postgres, an existing backup is going to be restored anyway
+if test -e "${SERVICES}" && test ! -s "${DATABASE}"; then
+  docker compose --file "${SERVICES}" up --detach database
+  ready
+  VERSION="$(docker compose --file "${SERVICES}" exec -T database pg_config --version | grep -oE '[0-9]+' | head -n1)"
+  if test "${VERSION}" != "${POSTGRES}"; then
     confirm "Upgrading postgres is needed. Would you like to create a backup with old data, upgrade postgres and restore the backup?" || exit 0
-    docker compose --file "${SERVICES}" exec -T database pg_dump -U teslamate teslamate > "${DATABASE}" || { rm -f "${DATABASE}"; exit 1; }
-  }
+    docker compose --file "${SERVICES}" stop teslamate grafana
+    docker compose --file "${SERVICES}" exec -T database pg_dump -U teslamate teslamate > "${DATABASE}.part"
+    mv "${DATABASE}.part" "${DATABASE}"
+  fi
 fi
 
 # Generate a stack file
@@ -223,17 +235,18 @@ docker compose --file "${SERVICES}" down --remove-orphans
 
 # Restore the backup if exists
 if test -s "${DATABASE}"; then
-  docker compose --file "${SERVICES}" down --volumes grafana database && \
-  docker compose --file "${SERVICES}" up --detach database && until \
-  docker compose --file "${SERVICES}" exec -T database pg_isready -h localhost -U teslamate &>/dev/null; do sleep 1; done && \
-  docker compose --file "${SERVICES}" exec -T database psql -v ON_ERROR_STOP=1 -U teslamate -d teslamate < "${DATABASE}" && rm -f "${DATABASE}"
+  docker compose --file "${SERVICES}" down --volumes grafana database
+  docker compose --file "${SERVICES}" up --detach database
+  ready
+  docker compose --file "${SERVICES}" exec -T database psql -v ON_ERROR_STOP=1 -U teslamate -d teslamate < "${DATABASE}"
 fi
 
-# Start the stack
+# Start the stack and remove the backup which is restored
 docker compose --file "${SERVICES}" up --detach
+rm -f "${DATABASE}"
 
-# Remove old images
-docker image prune --force
+# Remove old images, the credentials below are shown even if it fails
+docker image prune --force || true
 
 # Show next instructions
 style 2 "
