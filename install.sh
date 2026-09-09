@@ -41,6 +41,9 @@ function rand() {
 # Install Docker if missing
 command -v docker &>/dev/null || curl -fsSL https://get.docker.com | sh
 
+# Create the files with the secrets and the backups readable by their owner only
+umask 077
+
 # Generate a config if missing
 if test ! -e "${SETTINGS}"; then
   if confirm "Is your Tesla for the Chinese market?"; then
@@ -168,6 +171,7 @@ EOL
 
 # Keep the generated files with the secrets readable by their owner only
 chmod 600 "${SETTINGS}" "${SERVICES}"
+test ! -e "${DATABASE}" || chmod 600 "${DATABASE}"
 
 # Update the stack
 docker compose --file "${SERVICES}" pull

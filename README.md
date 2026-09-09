@@ -69,8 +69,10 @@ into the setting named "TUNNEL" to use the tunnel or leave that setting empty to
 stack. If your "settings.env" was created before this setting appeared, add the line "TUNNEL=" to it. Note that a tunnel
 requires a public domain name, it cannot be used with localhost.
 
-If you want to create a backup of the database, you can do it by running the following command:
-```docker compose --file services.yml exec -T database pg_dump -U teslamate teslamate > ./database.bck```
+If you want to create a backup of the database, you can do it by running the following command (the backup is
+readable by you only, keep it that way, and keep a copy of "settings.env" with it because the data is encrypted with
+a key from that file):
+```(umask 077; docker compose --file services.yml exec -T database pg_dump -U teslamate teslamate > ./database.bck)```
 
 To restore that backup, rename it to "database.tmp" and re-configure the stack. Keep the backup under any other name,
 otherwise it will be restored on the next re-configuration of the stack, replacing the current data.
