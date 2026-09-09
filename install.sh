@@ -18,7 +18,8 @@ function style() {
 function prompt() {
   while :; do
     style 6 "${1} [and press Enter]: "
-    read -r
+    read -r ${2-}
+    test -z "${2-}" || echo
     test -z "${REPLY}" || return 0
   done
 }
@@ -37,8 +38,20 @@ function rand() {
   openssl rand -base64 ${1} | tr -dc 'A-Za-z0-9' | head -c ${1}
 }
 
+function ready() {
+  for _ in {1..120}; do
+    docker compose --file "${SERVICES}" exec -T database pg_isready -h localhost -U teslamate &>/dev/null && return 0
+    sleep 1
+  done
+  style 1 "The database is not ready, check its logs: docker compose --file services.yml logs database\n"
+  return 1
+}
+
 # Install Docker if missing
 command -v docker &>/dev/null || curl -fsSL https://get.docker.com | sh
+
+# Create the files with the secrets and the backups readable by their owner only
+umask 077
 
 # Generate a config if missing
 if test ! -e "${SETTINGS}"; then
@@ -51,6 +64,12 @@ if test ! -e "${SETTINGS}"; then
   fi
   if confirm "Do you want to host TeslaMate on a public server?"; then
     prompt "Specify a domain name pointing to this server" && DOMAIN="${REPLY}"
+    if confirm "Do you want to use a Cloudflare tunnel instead of opening ports 80 and 443?"; then
+      style 3 "Create a tunnel in the Cloudflare dashboard (Zero Trust – Networks – Tunnels), \
+add a public hostname with your domain pointing to the service \"http://caddy:80\", \
+and copy the token of the tunnel\n"
+      prompt "Specify a token of the tunnel" -s && TUNNEL="${REPLY}"
+    fi
   else
     DOMAIN="localhost"
   fi
@@ -60,6 +79,8 @@ if test ! -e "${SETTINGS}"; then
 TIMEZONE=Europe/Minsk
 DOMAIN=${DOMAIN}
 USERNAME=${USERNAME}
+# A token of a Cloudflare tunnel, when it is empty the ports 80 and 443 are published:
+TUNNEL=${TUNNEL-}
 
 # Changing following settings can damage the stack:
 TESLA_API_HOST=${API_HOST}
@@ -68,34 +89,50 @@ ENCRYPTION_SECRET=$(rand 50)
 DATABASE_PASSWORD=$(rand 50)
 EOL
 
-# Read the config
-fi; source "${SETTINGS}"
+# Read the config, configs generated earlier have no tunnel
+fi; source "${SETTINGS}"; TUNNEL="${TUNNEL-}"
 
-# Backup database to upgrade postgres
-if test -e "${SERVICES}"; then
-  docker compose --file "${SERVICES}" up --detach database && until \
-  docker compose --file "${SERVICES}" exec -T database pg_isready -U teslamate &>/dev/null; do sleep 1; done && \
-  docker compose --file "${SERVICES}" exec -T database pg_config --version | grep -oE '[0-9]+' | head -n1 | grep -vq "${POSTGRES}" && { \
+# Backup the database to upgrade postgres, an existing backup is going to be restored anyway
+if test -e "${SERVICES}" && test ! -s "${DATABASE}"; then
+  docker compose --file "${SERVICES}" up --detach database
+  ready
+  VERSION="$(docker compose --file "${SERVICES}" exec -T database pg_config --version | grep -oE '[0-9]+' | head -n1)"
+  if test "${VERSION}" != "${POSTGRES}"; then
     confirm "Upgrading postgres is needed. Would you like to create a backup with old data, upgrade postgres and restore the backup?" || exit 0
-    docker compose --file "${SERVICES}" exec -T database pg_dump -U teslamate teslamate > "${DATABASE}" || { rm -f "${DATABASE}"; exit 1; }
-  }
+    docker compose --file "${SERVICES}" stop teslamate grafana
+    docker compose --file "${SERVICES}" exec -T database pg_dump -U teslamate teslamate > "${DATABASE}.part"
+    mv "${DATABASE}.part" "${DATABASE}"
+  fi
 fi
 
 # Generate a stack file
 cat >"${SERVICES}" <<EOL
-services:
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+services:${TUNNEL:+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: always
+    <<: *logging
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL}}
   caddy:
     image: caddy:2-alpine
     restart: always
-    ports:
-      - "80:80"
-      - "443:443"
+    <<: *logging
+    ${TUNNEL:+#}ports: ["80:80", "443:443"]
     volumes:
       - caddy-conf:/etc/caddy
       - caddy-data:/data
   teslamate:
     image: teslamate/teslamate:latest
     restart: always
+    <<: *logging
     depends_on:
       - database
     environment:
@@ -115,6 +152,7 @@ services:
   grafana:
     image: teslamate/grafana:latest
     restart: always
+    <<: *logging
     environment:
       - DATABASE_HOST=database
       - DATABASE_NAME=teslamate
@@ -129,6 +167,7 @@ services:
   database:
     image: postgres:${POSTGRES}
     restart: always
+    <<: *logging
     environment:
       - POSTGRES_DB=teslamate
       - POSTGRES_USER=teslamate
@@ -142,6 +181,10 @@ volumes:
   database:
 EOL
 
+# Keep the generated files with the secrets readable by their owner only
+chmod 600 "${SETTINGS}" "${SERVICES}"
+test ! -e "${DATABASE}" || chmod 600 "${DATABASE}"
+
 # Update the stack
 docker compose --file "${SERVICES}" pull
 
@@ -150,11 +193,16 @@ PASSWORD="$(rand 30)"
 SESSION="$(rand 50)"
 HASH="$(printf '%s\n' "${PASSWORD}" | docker run --rm --interactive caddy:2-alpine caddy hash-password)"
 
-# Generate a Caddyfile, secrets are passed through stdin to keep them out of the process list
-docker compose --file "${SERVICES}" up --detach caddy
-docker compose --file "${SERVICES}" exec -T caddy sh -c "cat > /etc/caddy/Caddyfile" <<EOL
-${DOMAIN} {
-  route {
+# Generate a Caddyfile, secrets are passed through stdin to keep them out of the process list,
+# a one-off container is used because it does not publish the ports of the service
+docker compose --file "${SERVICES}" run --rm -T caddy sh -c "cat > /etc/caddy/Caddyfile" <<EOL
+${TUNNEL:+http://}${DOMAIN} {
+  route {${TUNNEL:+
+    # Cloudflare terminates TLS in front of the tunnel but does not force HTTPS
+    # by default, so redirect the plain HTTP visitors before they are asked for
+    # the password. Only cloudflared reaches this port, its header is trusted
+    @insecure header X-Forwarded-Proto http
+    redir @insecure https://{host"}"{uri"}" 308}
     # WebKit does not send Basic Auth credentials on WebSocket handshakes
     # (https://bugs.webkit.org/show_bug.cgi?id=80362), so only handshakes of
     # the known endpoints are authenticated by the cookie issued below, any
@@ -187,14 +235,18 @@ docker compose --file "${SERVICES}" down --remove-orphans
 
 # Restore the backup if exists
 if test -s "${DATABASE}"; then
-  docker compose --file "${SERVICES}" down --volumes grafana database && \
-  docker compose --file "${SERVICES}" up --detach database && until \
-  docker compose --file "${SERVICES}" exec -T database pg_isready -U teslamate &>/dev/null; do sleep 1; done && \
-  docker compose --file "${SERVICES}" exec -T database psql -U teslamate -d teslamate < "${DATABASE}" && rm -f "${DATABASE}"
+  docker compose --file "${SERVICES}" down --volumes grafana database
+  docker compose --file "${SERVICES}" up --detach database
+  ready
+  docker compose --file "${SERVICES}" exec -T database psql -v ON_ERROR_STOP=1 -U teslamate -d teslamate < "${DATABASE}"
 fi
 
-# Start the stack
+# Start the stack and remove the backup which is restored
 docker compose --file "${SERVICES}" up --detach
+rm -f "${DATABASE}"
+
+# Remove old images, the credentials below are shown even if it fails
+docker image prune --force || true
 
 # Show next instructions
 style 2 "
@@ -210,6 +262,8 @@ Tesla, and click \"Sign in\".
 2. Go to https://${DOMAIN}/settings with your browser, log in with the \
 username and the password mentioned above if needed, and specify URLs:
 – \"https://${DOMAIN}\" as URL for the web app,
-– \"https://${DOMAIN}/grafana\" as URL for the dashboards.
+– \"https://${DOMAIN}/grafana\" as URL for the dashboards.${TUNNEL:+\n3. Check in the Cloudflare \
+dashboard that the tunnel is healthy and its public hostname \"${DOMAIN}\" points to the service \
+\"http://caddy:80\".}
 
 Enjoy using TeslaMate!\n"
