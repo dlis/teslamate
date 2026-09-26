@@ -64,6 +64,7 @@ if test ! -e "${SETTINGS}"; then
   fi
   if confirm "Do you want to host TeslaMate on a public server?"; then
     prompt "Specify a domain name pointing to this server" && DOMAIN="${REPLY}"
+    DOMAIN="$(echo "${DOMAIN}" | tr '[:upper:]' '[:lower:]')"; DOMAIN="${DOMAIN#*://}"; DOMAIN="${DOMAIN%%[:/]*}"
     if confirm "Do you want to use a Cloudflare tunnel instead of opening ports 80 and 443?"; then
       style 3 "Create a tunnel in the Cloudflare dashboard (Zero Trust – Networks – Tunnels), \
 add a public hostname with your domain pointing to the service \"http://caddy:80\", \
